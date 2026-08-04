@@ -47,8 +47,7 @@ public class GyroIOMPU6050 implements GyroIO {
      * exactly the same time as the Spark encoder signals.
      */
     yawTimestampQueue = SparkOdometryThread.getInstance().makeTimestampQueue();
-    yawPositionQueue =
-        SparkOdometryThread.getInstance().registerSignal(() -> latestYawRad);
+    yawPositionQueue = SparkOdometryThread.getInstance().registerSignal(() -> latestYawRad);
 
     receiverThread = new Thread(this::receiveLoop, "MPU6050-UDP-Receiver");
     receiverThread.setDaemon(true);
@@ -76,8 +75,7 @@ public class GyroIOMPU6050 implements GyroIO {
         double receivedYawRad = data.getDouble();
         double receivedRateRadPerSec = data.getDouble();
 
-        if (!Double.isFinite(receivedYawRad)
-            || !Double.isFinite(receivedRateRadPerSec)) {
+        if (!Double.isFinite(receivedYawRad) || !Double.isFinite(receivedRateRadPerSec)) {
           continue;
         }
 
@@ -101,21 +99,16 @@ public class GyroIOMPU6050 implements GyroIO {
   public void updateInputs(GyroIOInputs inputs) {
     long packetAgeNs = System.nanoTime() - lastPacketTimeNs;
 
-    inputs.connected =
-        lastPacketTimeNs != 0L && packetAgeNs < CONNECTION_TIMEOUT_NS;
+    inputs.connected = lastPacketTimeNs != 0L && packetAgeNs < CONNECTION_TIMEOUT_NS;
 
     inputs.yawPosition = Rotation2d.fromRadians(latestYawRad);
     inputs.yawVelocityRadPerSec = latestYawRateRadPerSec;
 
     inputs.odometryYawTimestamps =
-        yawTimestampQueue.stream()
-            .mapToDouble(Double::doubleValue)
-            .toArray();
+        yawTimestampQueue.stream().mapToDouble(Double::doubleValue).toArray();
 
     inputs.odometryYawPositions =
-        yawPositionQueue.stream()
-            .map(Rotation2d::fromRadians)
-            .toArray(Rotation2d[]::new);
+        yawPositionQueue.stream().map(Rotation2d::fromRadians).toArray(Rotation2d[]::new);
 
     yawTimestampQueue.clear();
     yawPositionQueue.clear();
