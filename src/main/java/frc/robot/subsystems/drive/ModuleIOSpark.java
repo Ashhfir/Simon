@@ -11,12 +11,13 @@ import com.ctre.phoenix6.controls.VelocityVoltage;
 import com.ctre.phoenix6.controls.VoltageOut;
 import com.ctre.phoenix6.hardware.ParentDevice;
 import com.ctre.phoenix6.hardware.TalonFX;
+import com.ctre.phoenix6.signals.InvertedValue;
 import com.ctre.phoenix6.signals.NeutralModeValue;
-import com.revrobotics.AbsoluteEncoder;
 import com.revrobotics.PersistMode;
+import com.revrobotics.REVLibError;
+import com.revrobotics.RelativeEncoder;
 import com.revrobotics.ResetMode;
 import com.revrobotics.spark.FeedbackSensor;
-import com.revrobotics.spark.SparkBase;
 import com.revrobotics.spark.SparkBase.ControlType;
 import com.revrobotics.spark.SparkClosedLoopController;
 import com.revrobotics.spark.SparkLowLevel.MotorType;
@@ -31,12 +32,23 @@ import edu.wpi.first.units.measure.Angle;
 import edu.wpi.first.units.measure.AngularVelocity;
 import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.units.measure.Voltage;
+import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.DutyCycleEncoder;
 import java.util.Queue;
 import java.util.function.DoubleSupplier;
 
 /**
- * Module IO implementation for a Falcon 500/TalonFX drive motor, a NEO/Spark Max turn motor, and a
- * duty-cycle absolute encoder connected to the turn Spark Max.
+ * Module IO implementation for a Falcon 500/TalonFX drive motor and a NEO/Spark Max turn motor.
+ *
+ * <p>The SRX Mag Encoder is used in the same high-level arrangement as the 2024 robot:
+ *
+ * <ul>
+ *   <li>A/B quadrature -> Spark Max alternate encoder, used for normal steering feedback/odometry.
+ *   <li>Absolute PWM -> roboRIO DIO, used to seed the quadrature position at startup.
+ * </ul>
+ *
+ * <p>This keeps the AdvantageKit-style IO structure while using the sensor arrangement already
+ * built into the modules.
  */
 public class ModuleIOSpark implements ModuleIO {
   private final Rotation2d zeroRotation;
@@ -52,10 +64,13 @@ public class ModuleIOSpark implements ModuleIO {
   private final VoltageOut driveVoltageRequest = new VoltageOut(0.0);
   private final VelocityVoltage driveVelocityRequest = new VelocityVoltage(0.0);
 
-  // Turn hardware: NEO controlled by a Spark Max.
-  private final SparkBase turnSpark;
-  private final AbsoluteEncoder turnEncoder;
+  // Turn hardware: NEO/Spark Max, with SRX Mag quadrature feedback through the Spark data port.
+  private final SparkMax turnSpark;
+  private final RelativeEncoder turnEncoder;
+  private final DutyCycleEncoder turnAbsoluteEncoder;
   private final SparkClosedLoopController turnController;
+  private boolean turnEncoderReady = false;
+  private boolean turnEncoderSynced = false;
 
   // Queue inputs from the Spark odometry thread.
   private final Queue<Double> timestampQueue;
@@ -75,7 +90,7 @@ public class ModuleIOSpark implements ModuleIO {
           case 1 -> frontRightZeroRotation;
           case 2 -> backLeftZeroRotation;
           case 3 -> backRightZeroRotation;
-          default -> Rotation2d.kZero;
+          default -> throw new IllegalArgumentException("Invalid module index: " + module);
         };
 
     int driveCanId =
@@ -84,7 +99,7 @@ public class ModuleIOSpark implements ModuleIO {
           case 1 -> frontRightDriveCanId;
           case 2 -> backLeftDriveCanId;
           case 3 -> backRightDriveCanId;
-          default -> 0;
+          default -> throw new IllegalArgumentException("Invalid module index: " + module);
         };
 
     int turnCanId =
@@ -93,17 +108,45 @@ public class ModuleIOSpark implements ModuleIO {
           case 1 -> frontRightTurnCanId;
           case 2 -> backLeftTurnCanId;
           case 3 -> backRightTurnCanId;
-          default -> 0;
+          default -> throw new IllegalArgumentException("Invalid module index: " + module);
+        };
+
+    boolean driveInverted =
+        switch (module) {
+          case 0 -> frontLeftDriveInverted;
+          case 1 -> frontRightDriveInverted;
+          case 2 -> backLeftDriveInverted;
+          case 3 -> backRightDriveInverted;
+          default -> throw new IllegalArgumentException("Invalid module index: " + module);
+        };
+
+    int turnEncoderDio =
+        switch (module) {
+          case 0 -> frontLeftTurnEncoderDio;
+          case 1 -> frontRightTurnEncoderDio;
+          case 2 -> backLeftTurnEncoderDio;
+          case 3 -> backRightTurnEncoderDio;
+          default -> throw new IllegalArgumentException("Invalid module index: " + module);
         };
 
     driveTalon = new TalonFX(driveCanId);
     turnSpark = new SparkMax(turnCanId, MotorType.kBrushless);
-    turnEncoder = turnSpark.getAbsoluteEncoder();
+
+    // Absolute SRX Mag PWM signal on roboRIO DIO. This is only needed to establish the module's
+    // position at startup; steering feedback after that comes from A/B quadrature.
+    turnAbsoluteEncoder = new DutyCycleEncoder(turnEncoderDio);
+    turnAbsoluteEncoder.setInverted(turnAbsoluteEncoderInverted);
+    turnAbsoluteEncoder.setConnectedFrequencyThreshold(200);
+
+    // SRX Mag A/B quadrature through the Spark Max data-port ribbon cable.
+    turnEncoder = turnSpark.getAlternateEncoder();
     turnController = turnSpark.getClosedLoopController();
 
     // Configure Falcon drive motor and its built-in encoder.
     var driveConfig = new TalonFXConfiguration();
     driveConfig.MotorOutput.NeutralMode = NeutralModeValue.Brake;
+    driveConfig.MotorOutput.Inverted =
+        driveInverted ? InvertedValue.Clockwise_Positive : InvertedValue.CounterClockwise_Positive;
     driveConfig.Feedback.SensorToMechanismRatio = driveMotorReduction;
     driveConfig.CurrentLimits.StatorCurrentLimit = driveMotorCurrentLimit;
     driveConfig.CurrentLimits.StatorCurrentLimitEnable = true;
@@ -113,14 +156,10 @@ public class ModuleIOSpark implements ModuleIO {
     driveConfig.Slot0.kP = driveKp;
     driveConfig.Slot0.kD = driveKd;
 
-    // Add MotorOutput.Inverted here if the Falcon direction is reversed.
-    // Example:
-    // driveConfig.MotorOutput.Inverted = InvertedValue.Clockwise_Positive;
-
     tryUntilOk(5, () -> driveTalon.getConfigurator().apply(driveConfig, 0.25));
     tryUntilOk(5, () -> driveTalon.setPosition(0.0, 0.25));
 
-    // Configure Spark Max turn motor and duty-cycle absolute encoder.
+    // Configure the SRX Mag A/B quadrature input as the Spark Max alternate encoder.
     var turnConfig = new SparkMaxConfig();
     turnConfig
         .inverted(turnInverted)
@@ -128,23 +167,26 @@ public class ModuleIOSpark implements ModuleIO {
         .smartCurrentLimit(turnMotorCurrentLimit)
         .voltageCompensation(12.0);
     turnConfig
-        .absoluteEncoder
+        .alternateEncoder
+        .setSparkMaxDataPortConfig()
+        .countsPerRevolution(turnEncoderCountsPerRevolution)
         .inverted(turnEncoderInverted)
         .positionConversionFactor(turnEncoderPositionFactor)
         .velocityConversionFactor(turnEncoderVelocityFactor)
+        .measurementPeriod(10)
         .averageDepth(2);
     turnConfig
         .closedLoop
-        .feedbackSensor(FeedbackSensor.kAbsoluteEncoder)
+        .feedbackSensor(FeedbackSensor.kAlternateOrExternalEncoder)
         .positionWrappingEnabled(true)
         .positionWrappingInputRange(turnPIDMinInput, turnPIDMaxInput)
         .pid(turnKp, 0.0, turnKd);
     turnConfig
         .signals
-        .absoluteEncoderPositionAlwaysOn(true)
-        .absoluteEncoderPositionPeriodMs((int) (1000.0 / odometryFrequency))
-        .absoluteEncoderVelocityAlwaysOn(true)
-        .absoluteEncoderVelocityPeriodMs(20)
+        .externalOrAltEncoderPositionAlwaysOn(true)
+        .externalOrAltEncoderPosition((int) (1000.0 / odometryFrequency))
+        .externalOrAltEncoderVelocityAlwaysOn(true)
+        .externalOrAltEncoderVelocity(20)
         .appliedOutputPeriodMs(20)
         .busVoltagePeriodMs(20)
         .outputCurrentPeriodMs(20);
@@ -167,8 +209,9 @@ public class ModuleIOSpark implements ModuleIO {
     BaseStatusSignal.setUpdateFrequencyForAll(50.0, driveVelocity, driveAppliedVolts, driveCurrent);
     ParentDevice.optimizeBusUtilizationForAll(driveTalon);
 
-    // Keep SparkOdometryThread because the turn motor is a Spark.
-    // Its generic registerSignal overload allows the TalonFX signal to be sampled with the Spark.
+    // Keep SparkOdometryThread because the turn motor/encoder are on the Spark Max.
+    // Its generic registerSignal overload also samples the TalonFX drive position in the same
+    // timestamped loop.
     timestampQueue = SparkOdometryThread.getInstance().makeTimestampQueue();
     drivePositionQueue =
         SparkOdometryThread.getInstance().registerSignal(() -> drivePosition.getValueAsDouble());
@@ -186,6 +229,25 @@ public class ModuleIOSpark implements ModuleIO {
     inputs.driveVelocityRadPerSec = Units.rotationsToRadians(driveVelocity.getValueAsDouble());
     inputs.driveAppliedVolts = driveAppliedVolts.getValueAsDouble();
     inputs.driveCurrentAmps = driveCurrent.getValueAsDouble();
+
+    // Seed the relative/quadrature steering encoder from the absolute PWM encoder once while
+    // disabled. Do not invent a zero if the absolute signal is missing; leave the module inhibited
+    // so a wiring problem is obvious instead of silently creating an incorrect steering offset.
+    inputs.turnAbsoluteEncoderConnected = turnAbsoluteEncoder.isConnected();
+    if (DriverStation.isDisabled() && !turnEncoderSynced && inputs.turnAbsoluteEncoderConnected) {
+      double absoluteRadians =
+          MathUtil.inputModulus(
+              Rotation2d.fromRotations(turnAbsoluteEncoder.get()).getRadians(),
+              turnPIDMinInput,
+              turnPIDMaxInput);
+
+      if (turnEncoder.setPosition(absoluteRadians) == REVLibError.kOk) {
+        turnEncoderReady = true;
+        turnEncoderSynced = true;
+      }
+    }
+    inputs.turnEncoderReady = turnEncoderReady;
+    inputs.turnEncoderSynced = turnEncoderSynced;
 
     // Update Spark Max turn inputs.
     sparkStickyFault = false;
@@ -220,16 +282,21 @@ public class ModuleIOSpark implements ModuleIO {
 
   @Override
   public void setDriveOpenLoop(double output) {
-    driveTalon.setControl(driveVoltageRequest.withOutput(output));
+    driveTalon.setControl(driveVoltageRequest.withOutput(turnEncoderReady ? output : 0.0));
   }
 
   @Override
   public void setTurnOpenLoop(double output) {
-    turnSpark.setVoltage(output);
+    turnSpark.setVoltage(turnEncoderReady ? output : 0.0);
   }
 
   @Override
   public void setDriveVelocity(double velocityRadPerSec) {
+    if (!turnEncoderReady) {
+      driveTalon.setControl(driveVoltageRequest.withOutput(0.0));
+      return;
+    }
+
     double velocityRotPerSec = Units.radiansToRotations(velocityRadPerSec);
     double ffVolts = driveKs * Math.signum(velocityRadPerSec) + driveKv * velocityRadPerSec;
 
@@ -239,6 +306,11 @@ public class ModuleIOSpark implements ModuleIO {
 
   @Override
   public void setTurnPosition(Rotation2d rotation) {
+    if (!turnEncoderReady) {
+      turnSpark.setVoltage(0.0);
+      return;
+    }
+
     double setpoint =
         MathUtil.inputModulus(
             rotation.plus(zeroRotation).getRadians(), turnPIDMinInput, turnPIDMaxInput);
