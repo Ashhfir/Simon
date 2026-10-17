@@ -20,6 +20,9 @@ public interface ModuleIO {
     public double driveCurrentAmps = 0.0;
 
     public boolean turnConnected = false;
+    public boolean turnAbsoluteEncoderConnected = true;
+    public boolean turnEncoderReady = true;
+    public boolean turnEncoderSynced = true;
     public Rotation2d turnPosition = Rotation2d.kZero;
     public double turnVelocityRadPerSec = 0.0;
     public double turnAppliedVolts = 0.0;

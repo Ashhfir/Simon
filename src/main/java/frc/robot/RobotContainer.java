@@ -19,6 +19,7 @@ import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine;
 import frc.robot.commands.DriveCommands;
 import frc.robot.subsystems.drive.Drive;
 import frc.robot.subsystems.drive.GyroIO;
+import frc.robot.subsystems.drive.GyroIONone;
 import frc.robot.subsystems.drive.ModuleIO;
 import frc.robot.subsystems.drive.ModuleIOSim;
 import frc.robot.subsystems.drive.ModuleIOSpark;
@@ -47,7 +48,7 @@ public class RobotContainer {
         // Real robot, instantiate hardware IO implementations
         drive =
             new Drive(
-                new GyroIO() {},
+                new GyroIONone(),
                 new ModuleIOSpark(0),
                 new ModuleIOSpark(1),
                 new ModuleIOSpark(2),
@@ -107,9 +108,10 @@ public class RobotContainer {
    * edu.wpi.first.wpilibj2.command.button.JoystickButton}.
    */
   private void configureButtonBindings() {
-    // Default command, normal field-relative drive
+    // Use robot-relative controls until a physical gyro is installed.
     drive.setDefaultCommand(
-        DriveCommands.joystickDrive(
+        DriveCommands.joystickDriveRobotRelative(
+            // DriveCommands.joystickDrive(
             drive,
             () -> -controller.getLeftY(),
             () -> -controller.getLeftX(),

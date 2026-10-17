@@ -23,6 +23,9 @@ public class Module {
 
   private final Alert driveDisconnectedAlert;
   private final Alert turnDisconnectedAlert;
+  private final Alert turnAbsoluteEncoderDisconnectedAlert;
+  private final Alert turnEncoderNotReadyAlert;
+  private final Alert turnEncoderNotSyncedAlert;
   private SwerveModulePosition[] odometryPositions = new SwerveModulePosition[] {};
 
   public Module(ModuleIO io, int index) {
@@ -35,6 +38,22 @@ public class Module {
     turnDisconnectedAlert =
         new Alert(
             "Disconnected turn motor on module " + Integer.toString(index) + ".", AlertType.kError);
+    turnAbsoluteEncoderDisconnectedAlert =
+        new Alert(
+            "Disconnected SRX Mag absolute encoder on module " + Integer.toString(index) + ".",
+            AlertType.kWarning);
+    turnEncoderNotReadyAlert =
+        new Alert(
+            "Turn encoder on module "
+                + Integer.toString(index)
+                + " is not initialized; drive output is inhibited.",
+            AlertType.kError);
+    turnEncoderNotSyncedAlert =
+        new Alert(
+            "Turn encoder on module "
+                + Integer.toString(index)
+                + " is using its startup-zero fallback. Point the module forward before rebooting.",
+            AlertType.kWarning);
   }
 
   public void periodic() {
@@ -53,6 +72,9 @@ public class Module {
     // Update alerts
     driveDisconnectedAlert.set(!inputs.driveConnected);
     turnDisconnectedAlert.set(!inputs.turnConnected);
+    turnAbsoluteEncoderDisconnectedAlert.set(!inputs.turnAbsoluteEncoderConnected);
+    turnEncoderNotReadyAlert.set(!inputs.turnEncoderReady);
+    turnEncoderNotSyncedAlert.set(inputs.turnEncoderReady && !inputs.turnEncoderSynced);
   }
 
   /** Runs the module with the specified setpoint state. Mutates the state to optimize it. */
