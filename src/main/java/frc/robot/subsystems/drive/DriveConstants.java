@@ -29,16 +29,10 @@ public class DriveConstants {
       };
 
   // Zeroed rotation values for each module, see setup instructions
-
   public static final Rotation2d frontLeftZeroRotation = new Rotation2d(-0.1104465802405206);
   public static final Rotation2d frontRightZeroRotation = new Rotation2d(1.2363885561730537);
   public static final Rotation2d backLeftZeroRotation = new Rotation2d(-1.558523130401064);
   public static final Rotation2d backRightZeroRotation = new Rotation2d(-0.7317084789118062);
-
-  //   public static final Rotation2d frontLeftZeroRotation = new Rotation2d(-0.1104465802405206);
-  //   public static final Rotation2d frontRightZeroRotation = new Rotation2d(1.2363885561730537);
-  //   public static final Rotation2d backLeftZeroRotation = new Rotation2d(-1.558523130401064);
-  //   public static final Rotation2d backRightZeroRotation = new Rotation2d(-0.7317084789118062);
 
   // Device CAN IDs
   // Reserved for the optional Pigeon implementation; no gyro is constructed in RobotContainer.

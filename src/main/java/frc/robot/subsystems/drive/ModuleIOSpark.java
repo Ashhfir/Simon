@@ -40,15 +40,10 @@ import java.util.function.DoubleSupplier;
 /**
  * Module IO implementation for a Falcon 500/TalonFX drive motor and a NEO/Spark Max turn motor.
  *
- * <p>The SRX Mag Encoder is used in the same high-level arrangement as the 2024 robot:
- *
- * <ul>
- *   <li>A/B quadrature -> Spark Max alternate encoder, used for normal steering feedback/odometry.
- *   <li>Absolute PWM -> roboRIO DIO, used to seed the quadrature position at startup.
- * </ul>
- *
- * <p>This keeps the AdvantageKit-style IO structure while using the sensor arrangement already
- * built into the modules.
+ * The SRX Mag Encoder is used in the same high-level arrangement as the 2024 robot:
+ * 
+ * A/B quadrature -> Spark Max alternate encoder, used for normal steering feedback/odometry.
+ * Absolute PWM -> roboRIO DIO, used to seed the quadrature position at startup.
  */
 public class ModuleIOSpark implements ModuleIO {
   private final Rotation2d zeroRotation;
