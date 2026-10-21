@@ -47,18 +47,38 @@ public class GyroIOMPU6050 implements GyroIO {
 
   public GyroIOMPU6050() {
     byte[] id = new byte[1];
-    if (!mpu.read(whoAmIRegister, id.length, id) && (id[0] & 0xFF) == 0x68) {
-      // Use the X gyro as clock source, enable a low-pass filter, and set a 100 Hz output rate.
-      initialized =
-          !mpu.write(powerManagementRegister, 0x01)
-              && !mpu.write(filterRegister, 0x03)
-              && !mpu.write(gyroConfigRegister, 0x10)
-              && !mpu.write(sampleRateRegister, 0x09);
-    }
-    if (!initialized) {
+    boolean readAborted = mpu.read(whoAmIRegister, id.length, id);
+
+    if (readAborted) {
       DriverStation.reportError(
-          "MPU-6050 not detected/configured on MXP I2C (address 0x68). Check wiring and reboot.",
+          "[MPU6050] WHO_AM_I read ABORTED on MXP I2C at 0x68. Check power, ground, SDA, SCL, and AD0.",
           false);
+    } else {
+      DriverStation.reportWarning(
+          String.format("[MPU6050] WHO_AM_I returned 0x%02X (expected 0x68)", id[0] & 0xFF),
+          false);
+    }
+
+    if (!readAborted && (id[0] & 0xFF) == 0x68) {
+      // Keep the same register settings; check each write independently for diagnostics.
+      boolean wakeOk = !mpu.write(powerManagementRegister, 0x01);
+      boolean filterOk = !mpu.write(filterRegister, 0x03);
+      boolean rangeOk = !mpu.write(gyroConfigRegister, 0x10);
+      boolean rateOk = !mpu.write(sampleRateRegister, 0x09);
+
+      initialized = wakeOk && filterOk && rangeOk && rateOk;
+      DriverStation.reportWarning(
+          String.format(
+              "[MPU6050] Config writes: wake=%s filter=%s gyroRange=%s sampleRate=%s",
+              wakeOk, filterOk, rangeOk, rateOk),
+          false);
+    }
+
+    if (!initialized) {
+      DriverStation.reportError("[MPU6050] Initialization FAILED; yaw will be unavailable.", false);
+    } else {
+      DriverStation.reportWarning(
+          "[MPU6050] Initialization OK; keep robot still during gyro calibration.", false);
     }
 
     yawTimestampQueue = SparkOdometryThread.getInstance().makeTimestampQueue();
@@ -90,6 +110,7 @@ public class GyroIOMPU6050 implements GyroIO {
           gyroBiasCounts = calibrationSum / calibrationSamples;
           calibrated = true;
           previousSampleMicros = nowMicros;
+          DriverStation.reportWarning("[MPU6050] Gyro calibration complete.", false);
         }
       }
       return yawRad;
