@@ -29,10 +29,15 @@ public class DriveConstants {
       };
 
   // Zeroed rotation values for each module, see setup instructions
-  public static final Rotation2d frontLeftZeroRotation = new Rotation2d(-0.1104465802405206);
-  public static final Rotation2d frontRightZeroRotation = new Rotation2d(1.2363885561730537);
-  public static final Rotation2d backLeftZeroRotation = new Rotation2d(-1.558523130401064);
-  public static final Rotation2d backRightZeroRotation = new Rotation2d(-0.7317084789118062);
+  public static final Rotation2d frontLeftZeroRotation = new Rotation2d(-0.08436900774110992);
+  public static final Rotation2d frontRightZeroRotation = new Rotation2d(1.2041749954223633);
+  public static final Rotation2d backLeftZeroRotation = new Rotation2d(-1.583068195973532);
+  public static final Rotation2d backRightZeroRotation = new Rotation2d(-0.7163689772235318);
+
+  //   public static final Rotation2d frontLeftZeroRotation = new Rotation2d(-0.1104465802405206);
+  //   public static final Rotation2d frontRightZeroRotation = new Rotation2d(1.2363885561730537);
+  //   public static final Rotation2d backLeftZeroRotation = new Rotation2d(-1.558523130401064);
+  //   public static final Rotation2d backRightZeroRotation = new Rotation2d(-0.7317084789118062);
 
   // Device CAN IDs
   // Reserved for the optional Pigeon implementation; no gyro is constructed in RobotContainer.
@@ -77,8 +82,8 @@ public class DriveConstants {
   // Drive PID configuration
   public static final double driveKp = 0.0;
   public static final double driveKd = 0.0;
-  public static final double driveKs = 0.0;
-  public static final double driveKv = 0.1;
+  public static final double driveKs = 0.12044; // carpet
+  public static final double driveKv = 0.11152; // carpet
   public static final double driveSimP = 0.05;
   public static final double driveSimD = 0.0;
   public static final double driveSimKs = 0.0;
