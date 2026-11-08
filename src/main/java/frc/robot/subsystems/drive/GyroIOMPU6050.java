@@ -55,8 +55,7 @@ public class GyroIOMPU6050 implements GyroIO {
           false);
     } else {
       DriverStation.reportWarning(
-          String.format("[MPU6050] WHO_AM_I returned 0x%02X (expected 0x68)", id[0] & 0xFF),
-          false);
+          String.format("[MPU6050] WHO_AM_I returned 0x%02X (expected 0x68)", id[0] & 0xFF), false);
     }
 
     if (!readAborted && (id[0] & 0xFF) == 0x68) {

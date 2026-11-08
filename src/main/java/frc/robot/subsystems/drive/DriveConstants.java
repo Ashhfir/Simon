@@ -34,11 +34,6 @@ public class DriveConstants {
   public static final Rotation2d backLeftZeroRotation = new Rotation2d(-1.583068195973532);
   public static final Rotation2d backRightZeroRotation = new Rotation2d(-0.7163689772235318);
 
-  //   public static final Rotation2d frontLeftZeroRotation = new Rotation2d(-0.1104465802405206);
-  //   public static final Rotation2d frontRightZeroRotation = new Rotation2d(1.2363885561730537);
-  //   public static final Rotation2d backLeftZeroRotation = new Rotation2d(-1.558523130401064);
-  //   public static final Rotation2d backRightZeroRotation = new Rotation2d(-0.7317084789118062);
-
   // Device CAN IDs
   // Reserved for the optional Pigeon implementation; no gyro is constructed in RobotContainer.
   public static final int pigeonCanId = 9;
